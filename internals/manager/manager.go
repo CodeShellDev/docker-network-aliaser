@@ -191,7 +191,7 @@ func connectNetwork(ctx context.Context, containerID, alias string, network stru
 		return err
 	}
 
-	_, err = client.NetworkConnect(ctx, result.ID, cli.NetworkConnectOptions{EndpointConfig: &net.EndpointSettings{Aliases: []string{ alias }}})
+	_, err = client.NetworkConnect(ctx, result.ID, cli.NetworkConnectOptions{Container: containerID, EndpointConfig: &net.EndpointSettings{Aliases: []string{ alias }}})
 	return err
 }
 
