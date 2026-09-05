@@ -34,6 +34,14 @@ func Start() {
 	)
 	defer cancel()
 
+	for _, network := range config.ENV.NETWORKS {
+		err := checkNetwork(ctx, network)
+
+		if err != nil {
+			logger.Error("Issue with " + network.Name + " network: " + err.Error())
+		}
+	}
+
 	err := reconcile(ctx)
 
 	if err != nil {
@@ -185,6 +193,32 @@ func connectNetwork(ctx context.Context, containerID, alias string, network stru
 	return err
 }
 
+func checkNetwork(ctx context.Context, network structure.NetworkConfig) error {
+	client := docker.Client()
+
+	result, err := getNetworkByName(ctx, network.Name)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = client.NetworkInspect(ctx, result.ID, cli.NetworkInspectOptions{})
+	if err == nil {
+		return nil
+	}
+
+	if !config.ENV.CREATE_NETWORKS {
+		logger.Error("Network " + network.Name + " does not exist")
+
+		return errors.New("network not found")
+	}
+
+	logger.Info("Network " + network.Name + " does not exist. Creating it.")
+
+	_, err = client.NetworkCreate(ctx, network.Name, cli.NetworkCreateOptions{Driver: "bridge", Labels: map[string]string{"managed-by": "docker-network-aliaser"}})
+	return err
+}
+
 func getNetworkByName(ctx context.Context, name string) (net.Summary, error){
 	client := docker.Client()
 
@@ -207,7 +241,7 @@ func getNetworkByName(ctx context.Context, name string) (net.Summary, error){
 }
 
 func constructDNSName(project, alias string) (string, error) {
-	tmplt, err := templating.CreateTemplateFromString(project + ":" + alias, config.ENV.DNS_NAME_TEMPLATE)
+	tmplt, err := templating.CreateTemplateFromString(project + ":" + alias, config.ENV.ALIAS_NAME_TEMPLATE)
 
 	if err != nil {
 		return "", err

@@ -6,7 +6,7 @@ import (
 	"github.com/codeshelldev/docker-network-aliaser/internals/manager"
 	"github.com/codeshelldev/gotl/pkg/logger"
 )
-//s
+
 func main() {
 	config.Load()
 
