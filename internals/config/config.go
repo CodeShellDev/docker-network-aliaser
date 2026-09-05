@@ -52,9 +52,12 @@ func Load() {
 	}
 
 	for i, prefix := range prefixes {
-		logger.Debug("Registered prefix ", prefix, " with network name ", networks[i])
+		prefix = strings.TrimSpace(prefix)
+		network := strings.TrimSpace(networks[i])
 
-		ENV.NETWORKS[prefix] = structure.NetworkConfig{Name: networks[i]}
+		logger.Debug("Registered prefix ", prefix, " with network name ", network)
+
+		ENV.NETWORKS[prefix] = structure.NetworkConfig{Name: network}
 	}
 
 	logger.Info("Registered ", len(prefixes), " prefixes")
