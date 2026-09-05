@@ -57,7 +57,6 @@ func reconcile(ctx context.Context) error {
 	client := docker.Client()
 
 	filters := cli.Filters{}.
-		Add("type", "container").
 		Add("status", "running")
 		
 	containers, err := client.ContainerList(ctx, cli.ContainerListOptions{
