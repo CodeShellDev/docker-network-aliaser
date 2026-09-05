@@ -1,0 +1,28 @@
+# Ignore all
+*
+
+# env file
+*.env
+
+# Exclude git folders
+.git*
+.github
+
+# Ignore yml files
+*.yaml
+*.yml
+
+# Markdown files
+*.md
+
+# Include data/
+!data/*
+
+# Ignore source files
+*.go
+go.mod
+go.sum
+
+# Include build
+!app
+!dist/*
