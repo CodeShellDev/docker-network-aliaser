@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/codeshelldev/docker-network-aliaser/internals/config"
 	"github.com/codeshelldev/docker-network-aliaser/internals/docker"
 	"github.com/codeshelldev/docker-network-aliaser/internals/manager"
@@ -8,9 +10,9 @@ import (
 )
 
 func main() {
-	config.Load()
+	logger.Init(os.Getenv("LOG_LEVEL"))
 
-	logger.Init(config.ENV.LOG_LEVEL)
+	config.Load()
 
 	docker.Init()
 
