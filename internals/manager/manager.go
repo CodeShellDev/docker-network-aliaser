@@ -183,7 +183,7 @@ func connectNetwork(ctx context.Context, containerID, alias string, network stru
 		}
 	}
 
-	logger.Debug("Connecting ", shortID(containerID), " to ", endpoint.NetworkID, " as ", alias)
+	logger.Debug("Connecting ", shortID(containerID), " to ", network.Name, " as ", alias)
 
 	result, err := getNetworkByName(ctx, network.Name)
 
