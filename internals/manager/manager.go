@@ -151,7 +151,7 @@ func processContainer(ctx context.Context, containerID string) error {
 		return nil
 	}
 
-	dnsName, err := constructDNSName(project, alias)
+	dnsName, err := constructDnsAlias(project, alias)
 
 	if err != nil {
 		return err
@@ -242,14 +242,14 @@ func getNetworkByName(ctx context.Context, name string) (net.Summary, error){
 	return result.Items[0], nil
 }
 
-func constructDNSName(project, alias string) (string, error) {
+func constructDnsAlias(project, alias string) (string, error) {
 	tmplt, err := templating.CreateTemplateFromString(project + ":" + alias, config.ENV.ALIAS_NAME_TEMPLATE)
 
 	if err != nil {
 		return "", err
 	}
 
-	return templating.ExecuteTemplate(tmplt, map[string]string{"project": sanitize(project), "alias": sanitize(alias)})
+	return templating.ExecuteTemplate(tmplt, map[string]string{"PROJECT": sanitize(project), "ALIAS": sanitize(alias)})
 }
 
 func isEnabled(labels map[string]string) (bool, string) {

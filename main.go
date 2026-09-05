@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime/debug"
 
 	"github.com/codeshelldev/docker-network-aliaser/internals/config"
 	"github.com/codeshelldev/docker-network-aliaser/internals/docker"
@@ -27,6 +28,13 @@ func main() {
 	docker.InitClient()
 
 	stop := docker.Run(func() {
+		defer func() {
+			r := recover()
+			if r != nil {
+				logger.Fatal("Paniced: ", debug.Stack())
+			}
+		}()
+
 		manager.Start()
 	})
 
