@@ -41,11 +41,15 @@ func Start() {
 		}
 	}
 
+	logger.Debug("Starting reconsiliation...")
+
 	err := reconcile(ctx)
 
 	if err != nil {
 		logger.Error("Reconsiliation failed: ", err.Error())
 	}
+
+	logger.Debug("Starting watcher...")
 
 	err = watch(ctx)
 	if err != nil {
@@ -70,7 +74,7 @@ func reconcile(ctx context.Context) error {
 	for _, c := range containers.Items {
 		err := processContainer(ctx, c.ID)
 		if err != nil {
-			logger.Error("Could not process ", shortID(c.ID), ":", err.Error())
+			return err
 		}
 	}
 
