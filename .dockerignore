@@ -20,8 +20,6 @@
 
 # Ignore source files
 *.go
-go.mod
-go.sum
 
 # Include build
 !app
