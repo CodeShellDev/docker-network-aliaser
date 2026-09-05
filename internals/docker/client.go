@@ -17,7 +17,7 @@ func InitClient(options ...client.Opt) {
 	apiClient, err = client.New(options...)
 
 	if err != nil {
-		logger.Fatal("Could not connect to " + apiClient.DaemonHost() + ": ", err.Error())
+		logger.Fatal("Could not connect to ", apiClient.DaemonHost(), ": ", err.Error())
 	}
 	defer apiClient.Close()
 }

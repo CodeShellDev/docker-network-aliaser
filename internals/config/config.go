@@ -35,7 +35,7 @@ func Load() {
 		createNetworks, err := strconv.ParseBool(createNetworksStr)
 
 		if err != nil {
-			logger.Error("Invalid CREATE_NETWORKS: " + err.Error())
+			logger.Error("Invalid CREATE_NETWORKS: ", err.Error())
 		} else {
 			ENV.CREATE_NETWORKS = createNetworks
 		}
@@ -52,7 +52,7 @@ func Load() {
 	}
 
 	for i, prefix := range prefixes {
-		logger.Debug("Registered prefix " + prefix + " with network name " + networks[i])
+		logger.Debug("Registered prefix ", prefix, " with network name ", networks[i])
 
 		ENV.NETWORKS[prefix] = structure.NetworkConfig{Name: networks[i]}
 	}
