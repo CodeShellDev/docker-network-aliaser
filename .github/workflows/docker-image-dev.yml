@@ -22,7 +22,6 @@ jobs:
         with:
           registry: ghcr.io
           token: ${{ secrets.GITHUB_TOKEN }}
-          use-qemu: "true"
           flavor: |
             latest=false
           tags: |
