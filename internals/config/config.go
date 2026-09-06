@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/codeshelldev/docker-network-aliaser/internals/config/structure"
 	"github.com/codeshelldev/gotl/pkg/logger"
@@ -12,6 +13,7 @@ import (
 var ENV = &structure.ENV{
 	LOG_LEVEL: "info",
 	ALIAS_NAME_TEMPLATE: "{{.PROJECT}}_{{.ALIAS}}",
+	RECONCILE_INTERVAL: 5*time.Minute,
 	CREATE_NETWORKS: true,
 	NETWORKS: map[string]structure.NetworkConfig{},
 }
@@ -27,6 +29,18 @@ func Load() {
 
 	if strings.TrimSpace(tmpl) != "" {
 		ENV.ALIAS_NAME_TEMPLATE = tmpl
+	}
+
+	reconcileIntervalStr := os.Getenv("RECONCILE_INTERVAL")
+
+	if strings.TrimSpace(reconcileIntervalStr) != "" {
+		reconcileInterval, err := time.ParseDuration(reconcileIntervalStr)
+
+		if err != nil {
+			logger.Error("Invalid RECONCILE_INTERVAL: ", err.Error())
+		} else {
+			ENV.RECONCILE_INTERVAL = reconcileInterval
+		}
 	}
 
 	createNetworksStr := os.Getenv("CREATE_NETWORKS")
