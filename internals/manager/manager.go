@@ -6,14 +6,15 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/codeshelldev/docker-network-aliaser/internals/config"
 	"github.com/codeshelldev/docker-network-aliaser/internals/config/structure"
 	"github.com/codeshelldev/docker-network-aliaser/internals/docker"
 	"github.com/codeshelldev/gotl/pkg/logger"
 	"github.com/codeshelldev/gotl/pkg/templating"
-	"github.com/moby/moby/api/types/network"
 	net "github.com/moby/moby/api/types/network"
 	cli "github.com/moby/moby/client"
 )
@@ -35,25 +36,77 @@ func Start() {
 
 	for _, network := range config.ENV.NETWORKS {
 		err := checkNetwork(ctx, network)
-
 		if err != nil {
 			logger.Error("Issue with ", network.Name, " network: ", err.Error())
 		}
 	}
 
-	logger.Debug("Starting reconsiliation...")
+	logger.Debug("Starting initial reconciliation...")
 
 	err := reconcile(ctx)
-
 	if err != nil {
-		logger.Error("Reconsiliation failed: ", err.Error())
+		logger.Error("Reconciliation failed: ", err.Error())
 	}
 
-	logger.Debug("Starting watcher...")
+	go runWatcher(ctx)
+	go runReconciler(ctx)
 
-	err = watch(ctx)
-	if err != nil {
-		logger.Error("Watcher errored: ", err.Error())
+	<-ctx.Done()
+
+	logger.Info("Shutting down...")
+}
+
+func runWatcher(ctx context.Context) {
+	const retryDelay = 5*time.Second
+
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+
+		logger.Debug("Starting Docker event watcher...")
+
+		err := watch(ctx)
+
+		if ctx.Err() != nil {
+			return
+		}
+
+		if err != nil {
+			logger.Error("Docker event watcher stopped: ", err.Error())
+		}
+
+		logger.Debug("Docker event watcher reconnecting in ", retryDelay)
+
+		timer := time.NewTimer(retryDelay)
+
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+
+		case <-timer.C:
+		}
+	}
+}
+
+func runReconciler(ctx context.Context) {
+	ticker := time.NewTicker(config.ENV.RECONCILE_INTERVAL)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-ticker.C:
+			logger.Debug("Starting periodic reconciliation...")
+
+			err := reconcile(ctx)
+			if err != nil {
+				logger.Error("Periodic reconciliation failed: ", err.Error())
+			}
+		}
 	}
 }
 
@@ -62,20 +115,27 @@ func reconcile(ctx context.Context) error {
 
 	filters := cli.Filters{}.
 		Add("status", "running")
-		
+
 	containers, err := client.ContainerList(ctx, cli.ContainerListOptions{
 		Filters: filters,
 	})
-
 	if err != nil {
 		return err
 	}
 
+	var failed int
+
 	for _, c := range containers.Items {
 		err := processContainer(ctx, c.ID)
 		if err != nil {
-			return err
+			failed++
+
+			logger.Error("Could not process ", shortID(c.ID), ": ", err.Error())
 		}
+	}
+
+	if failed > 0 {
+		return errors.New(strconv.Itoa(failed) + " containers failed reconciliation")
 	}
 
 	return nil
@@ -97,7 +157,11 @@ func watch(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 
-		case err := <-result.Err:
+		case err, ok := <-result.Err:
+			if !ok {
+				return errors.New("Docker event error stream closed")
+			}
+
 			if err != nil {
 				return err
 			}
@@ -126,38 +190,57 @@ func processContainer(ctx context.Context, containerID string) error {
 
 	labels := result.Container.Config.Labels
 
-	enabled, prefix := isEnabled(labels)
-
-	network := config.ENV.NETWORKS[prefix]
+	enabled, prefixes := getEnabled(labels)
 
 	if !enabled {
 		return nil
 	}
 
 	project := labels[PROJECT_LABEL]
+
 	if project == "" {
 		logger.Warn("Container ", shortID(containerID), " is enabled but has no Compose project")
 		return nil
 	}
 
-	alias := labels[prefix + "." + ALIAS_LABEL_PART]
+	service := labels[SERVICE_LABEL]
 
-	if alias == "" {
-		alias = labels[SERVICE_LABEL]
+	var failed int
+
+	for _, prefix := range prefixes {
+		network := config.ENV.NETWORKS[prefix]
+
+		alias := labels[prefix + "." + ALIAS_LABEL_PART]
+		if alias == "" {
+			alias = service
+		}
+
+		if alias == "" {
+			logger.Warn("Container ", shortID(containerID), " has no service or alias")
+			failed++
+			continue
+		}
+
+		dnsName, err := constructDnsAlias(project, alias)
+		if err != nil {
+			logger.Error("Could not construct alias for ", prefix, ": ", err.Error())
+			failed++
+			continue
+		}
+
+		err = connectNetwork(ctx, containerID, dnsName, network)
+		if err != nil {
+			logger.Error("Could not process prefix ", prefix, ": ", err.Error())
+			failed++
+			continue
+		}
 	}
 
-	if alias == "" {
-		logger.Warn("Container ", shortID(containerID), " has no service or alias")
-		return nil
+	if failed > 0 {
+		return errors.New(strconv.Itoa(failed) + " prefixes failed")
 	}
 
-	dnsName, err := constructDnsAlias(project, alias)
-
-	if err != nil {
-		return err
-	}
-
-	return connectNetwork(ctx, containerID, dnsName, network)
+	return nil
 }
 
 func connectNetwork(ctx context.Context, containerID, alias string, network structure.NetworkConfig) error {
@@ -175,23 +258,47 @@ func connectNetwork(ctx context.Context, containerID, alias string, network stru
 			return nil
 		}
 
-		logger.Info("Updating alias for ", shortID(containerID), ": " + alias)
+		logger.Info("Adding alias for ", shortID(containerID), ": ", alias)
 
-		_, err := client.NetworkDisconnect(ctx, endpoint.NetworkID, cli.NetworkDisconnectOptions{})
+		aliases := append([]string{}, endpoint.Aliases...)
+		aliases = append(aliases, alias)
+
+		_, err := client.NetworkDisconnect(ctx, endpoint.NetworkID, cli.NetworkDisconnectOptions{
+			Container: containerID,
+			Force: true,
+		})
 		if err != nil {
 			return err
 		}
+
+		_, err = client.NetworkConnect(ctx, endpoint.NetworkID, cli.NetworkConnectOptions{
+			Container: containerID,
+			EndpointConfig: &net.EndpointSettings{
+				Aliases: aliases,
+			},
+		})
+
+		return err
 	}
 
 	logger.Debug("Connecting ", shortID(containerID), " to ", network.Name, " as ", alias)
 
 	result, err := getNetworkByName(ctx, network.Name)
-
 	if err != nil {
 		return err
 	}
 
-	_, err = client.NetworkConnect(ctx, result.ID, cli.NetworkConnectOptions{Container: containerID, EndpointConfig: &net.EndpointSettings{Aliases: []string{ alias }}})
+	if result.ID == "" {
+		return errors.New("network not found: " + network.Name)
+	}
+
+	_, err = client.NetworkConnect(ctx, result.ID, cli.NetworkConnectOptions{
+		Container: containerID,
+		EndpointConfig: &net.EndpointSettings{
+			Aliases: []string{alias},
+		},
+	})
+
 	return err
 }
 
@@ -199,13 +306,11 @@ func checkNetwork(ctx context.Context, network structure.NetworkConfig) error {
 	client := docker.Client()
 
 	result, err := getNetworkByName(ctx, network.Name)
-
 	if err != nil {
 		return err
 	}
 
-	_, err = client.NetworkInspect(ctx, result.ID, cli.NetworkInspectOptions{})
-	if err == nil {
+	if result.ID != "" {
 		return nil
 	}
 
@@ -221,25 +326,24 @@ func checkNetwork(ctx context.Context, network structure.NetworkConfig) error {
 	return err
 }
 
-func getNetworkByName(ctx context.Context, name string) (net.Summary, error){
+func getNetworkByName(ctx context.Context, name string) (net.Summary, error) {
 	client := docker.Client()
 
-	filters := cli.Filters{}.
-		Add("name", name)
-	
 	result, err := client.NetworkList(ctx, cli.NetworkListOptions{
-		Filters: filters,
+		Filters: cli.Filters{}.
+			Add("name", name),
 	})
-
 	if err != nil {
-		return network.Summary{}, err
+		return net.Summary{}, err
 	}
 
-	if len(result.Items) == 0 {
-		return network.Summary{}, nil
+	for _, n := range result.Items {
+		if n.Name == name {
+			return n, nil
+		}
 	}
 
-	return result.Items[0], nil
+	return net.Summary{}, nil
 }
 
 func constructDnsAlias(project, alias string) (string, error) {
@@ -252,7 +356,9 @@ func constructDnsAlias(project, alias string) (string, error) {
 	return templating.ExecuteTemplate(tmplt, map[string]string{"PROJECT": sanitize(project), "ALIAS": sanitize(alias)})
 }
 
-func isEnabled(labels map[string]string) (bool, string) {
+func getEnabled(labels map[string]string) (bool, []string) {
+	prefixes := []string{}
+
 	for prefix := range config.ENV.NETWORKS {
 		value, exists := labels[prefix + "." + ENABLED_LABEL_PART]
 
@@ -261,10 +367,13 @@ func isEnabled(labels map[string]string) (bool, string) {
 		}
 
 		value = strings.ToLower(value)
-		return value == "true", prefix
+
+		if value == "true" {
+			prefixes = append(prefixes, prefix)
+		}
 	}
 
-	return false, ""
+	return len(prefixes) != 0, prefixes
 }
 
 func shortID(id string) string {
