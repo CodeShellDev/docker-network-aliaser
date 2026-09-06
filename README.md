@@ -54,7 +54,7 @@ Take a look at this compose file below:
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: authentik-postgres
+    container_name: example-project-postgres
     labels:
       - my_prefix_1.enable=true
       - my_prefix_1.alias=db
