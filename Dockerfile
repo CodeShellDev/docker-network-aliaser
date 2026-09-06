@@ -35,8 +35,6 @@ ENV IMAGE_TAG=$IMAGE_TAG
 #   Application Configuration   #
 #===============================#
 
-ENV PORT=5555
-
 WORKDIR /app
 
 COPY --from=builder /app/app .

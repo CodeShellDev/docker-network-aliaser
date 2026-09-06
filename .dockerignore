@@ -1,28 +1,28 @@
-# Ignore all
-*
+# Env files
+.env
 
-# env file
-*.env
+# Editor/IDE
+# .idea/
+.vscode/
 
-# Exclude git folders
+# Git folders
 .git*
-.github
+!.github
 
-# Ignore yml files
-*.yaml
-*.yml
+# Docusaurus
+.docusaurus
+node_modules
+
+# Editor config
+.editorconfig
 
 # Markdown files
-*.md
+**/*.md
+
+!LICENSE
 
 # Include data/
 !data/*
 
-# Ignore source files
-*.go
-go.mod
-go.sum
-
-# Include build
-!app
-!dist/*
+# Include source files
+!*.go
