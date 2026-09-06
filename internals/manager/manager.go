@@ -76,7 +76,7 @@ func runWatcher(ctx context.Context) {
 			logger.Error("Docker event watcher stopped: ", err.Error())
 		}
 
-		logger.Debug("Docker event watcher reconnecting in ", retryDelay)
+		logger.Debug("Docker event watcher reconnecting in ", retryDelay.String())
 
 		timer := time.NewTimer(retryDelay)
 
