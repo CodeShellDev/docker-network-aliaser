@@ -18,7 +18,7 @@ Take a look at this compose file below:
 +{{{ read "examples/postgres.docker-compose.yaml" }}}
 ```
 
-Here we are enabling `my_prefix_1` and overriding the default alias that is derived from the service name with `my_prefix_1.alias`.
+Here we are enabling `my_prefix_1` and overriding the default alias that is derived from the service name with `my_prefix_1.alias` (overriding this is optional).
 
 D.N.A will then connect the container to the `my_network_1` network with the alias `example-project_db`.
 Now other containers can reach `postgres` via `example-project_db` without having to manually configure this alias or attaching the network to the compose project.
